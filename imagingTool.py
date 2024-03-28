@@ -5,6 +5,7 @@ import numpy as np
 import cv2
 from PIL import Image
 from skimage import exposure
+import numpy as np
 import matplotlib.pyplot as plt 
 
 
@@ -19,6 +20,9 @@ def dcmToImage(ds):
 
     image = exposure.equalize_adapthist(image/np.max(image), clip_limit=0.03)
     return image
+
+def reject_outliers(data, m=2):
+    return data[abs(data - np.mean(data)) < m * np.std(data)]
 
 def colorRangeGraph(image):
     # find the avevage xvalue of the image
@@ -35,6 +39,8 @@ def colorRangeGraph(image):
     return meanIndex
 
 def TEfinder(image):
+    rectLocation = [0]*4
+
      # Convert the image to grayscale
     if len(image.shape) > 2:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -67,30 +73,30 @@ def TEfinder(image):
     # grab x, y values of the oval contours
     for cnt in oval_contours:
         x, y, w, h = cv2.boundingRect(cnt)
-        cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
         xList.append(x)
         yList.append(y)
-    
-    # plot all of the x and y values on a histogram
-    print(xList)
 
-    # find max x and y values
-    #x = max([x for x, _, _, _ in [cv2.boundingRect(cnt) for cnt in oval_contours]])
-    #y = max([y for _, y, _, _ in [cv2.boundingRect(cnt) for cnt in oval_contours]])
+    # strip outliers from the x, y values
+    xList = np.array(xList)
+    yList = np.array(yList)
+    xList = reject_outliers(xList)
+    yList = reject_outliers(yList)
 
+    rectLocation[0] = np.max(xList)
+    rectLocation[1] = np.min(xList)
 
-
-
+    rectLocation[2] = np.max(yList)
+    rectLocation[3] = np.min(yList)
 
     # display the image
 
-    return image   
+    return rectLocation
 
 
 def main():
     # Read the dicom file
     inputDir = 'dcmHoldingFolder'
-    file = os.path.join(inputDir, 'xray.dcm')
+    file = os.path.join(inputDir, 'xrayTest.dcm')
 
     # Convert the dicom file to an image
     ds = pydicom.dcmread(file)
@@ -103,12 +109,21 @@ def main():
         mask = cv2.inRange(image, thresh, 1.0)
         image = cv2.bitwise_and(image, image, mask=mask)
 
+    
     # Pass image into TE finder
-    imageTE = TEfinder(image)
+    rect = TEfinder(image)
         
-    # Display the image with the TE finder and the original image
-    plt.imshow(imageTE)
-    plt.show()
+    xMax, xMin, yMax, yMin = rect
+    
+    # convert colorspace so that rectangle can be overlayed on the image
+    image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+    image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
+    # create a rectangle using dimensions and overlay it on the image
+    cv2.rectangle(image, (xMin, yMin), (xMax, yMax+20), (255, 0, 0), 2)
+    
+    cv2.imshow('image', image)
+    cv2.waitKey(0)
 
    
     
