@@ -29,7 +29,7 @@ def colorRangeGraph(image):
     meanIndex = np.mean(image.ravel())
 
     # move the mean slightly to the left using standard deviation
-    meanIndex = meanIndex - 0.4*np.std(image.ravel())
+    meanIndex = meanIndex - 0.35*np.std(image.ravel())
     # display graph of the image color range with mean
     
     #plt.hist(image.ravel(), bins=256, range=(0.0, 1.0), fc='k', ec='k')
@@ -39,7 +39,7 @@ def colorRangeGraph(image):
     return meanIndex
 
 def TEfinder(image):
-    rectLocation = [0]*4
+    rectLocation = []
 
      # Convert the image to grayscale
     if len(image.shape) > 2:
@@ -69,6 +69,11 @@ def TEfinder(image):
 
     xList = [0]
     yList = [0]
+    
+    # draw the contours on the image
+    cv2.drawContours(image, oval_contours, -1, (0, 255, 0), 3)
+    plt.imshow(image)
+    plt.show()
 
     # grab x, y values of the oval contours
     for cnt in oval_contours:
@@ -76,17 +81,22 @@ def TEfinder(image):
         xList.append(x)
         yList.append(y)
 
-    # strip outliers from the x, y values
+    # strip outliers from the x, y values and any 0 values
     xList = np.array(xList)
     yList = np.array(yList)
     xList = reject_outliers(xList)
     yList = reject_outliers(yList)
+    
+    xList = xList[xList != 0]
+    yList = yList[yList != 0]
+    
+    print(xList, yList)
 
-    rectLocation[0] = np.max(xList)
-    rectLocation[1] = np.min(xList)
+    rectLocation.append(np.max(xList)) 
+    rectLocation.append(np.min(xList))
 
-    rectLocation[2] = np.max(yList)
-    rectLocation[3] = np.min(yList)
+    rectLocation.append(np.max(yList))
+    rectLocation.append(np.min(yList))
 
     # display the image
 
@@ -96,7 +106,7 @@ def TEfinder(image):
 def main():
     # Read the dicom file
     inputDir = 'dcmHoldingFolder'
-    file = os.path.join(inputDir, 'xrayTest.dcm')
+    file = os.path.join(inputDir, 'xray1.dcm')
 
     # Convert the dicom file to an image
     ds = pydicom.dcmread(file)
@@ -115,13 +125,14 @@ def main():
         
     xMax, xMin, yMax, yMin = rect
     
+    print(xMax, xMin, yMax, yMin)
+    
     # convert colorspace so that rectangle can be overlayed on the image
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
     image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 
     # create a rectangle using dimensions and overlay it on the image
-    cv2.rectangle(image, (xMin, yMin), (xMax, yMax+20), (255, 0, 0), 2)
-    
+    cv2.rectangle(image, (xMin, yMin), (xMax, yMax), (255, 0, 0), 2)
     cv2.imshow('image', image)
     cv2.waitKey(0)
 
