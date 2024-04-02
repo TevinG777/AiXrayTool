@@ -81,21 +81,17 @@ def TEfinder(image):
         xList.append(x)
         yList.append(y)
 
-    # strip outliers from the x, y values and any 0 values
     xList = np.array(xList)
     yList = np.array(yList)
-    xList = reject_outliers(xList)
-    yList = reject_outliers(yList)
 
     # remove values if they are withing 1/32 of the max x value
     imageLength = image.shape[1]
     xList = xList[xList < 27/30*imageLength]
-    xList = xList[xList > 1/15*imageLength]
+    xList = xList[xList > 1/10*imageLength]
 
-    # remove values if they are withing 1/32 of the max y value
-    imageHeight = image.shape[0]
-    yList = yList[yList < 31/32*imageHeight]
-    yList = yList[yList > 1/32*imageHeight]
+    # strip outliers from the x, y values and any 0 values
+    xList = reject_outliers(xList)
+    yList = reject_outliers(yList)
 
     rectLocation.append(np.max(xList)) 
     rectLocation.append(np.min(xList))
@@ -128,7 +124,7 @@ def TurbFinder(image, rect):
     image[yMin:yMax, xMin:xMax] = 0
 
     # if pixel value is less than 50, turn it black
-    image[image < 135] = 0
+    #image[image < 135] = 0
     
     # convert image back to color
     image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
@@ -139,23 +135,35 @@ def TurbFinder(image, rect):
     # convert the image to 8-bit
     gray_image = cv2.normalize(gray_image, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
 
-    # find the contours in the image
+    # convert the image to grayscale
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # erode and dilate the image
+    kernel = np.ones((5, 5), np.uint8)
+    gray_image = cv2.erode(gray_image, kernel, iterations=1)
+    gray_image = cv2.dilate(gray_image, kernel, iterations=1)
+
+    
+    # find the contours in the grayscale image
     contours, _ = cv2.findContours(gray_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     
+    # convert the image back to color
+    gray_image = cv2.cvtColor(gray_image, cv2.COLOR_GRAY2BGR)
+
+    
+    # display the image with contours
+    cv2.drawContours(gray_image, contours, -1, (0, 255, 0), 3)
+    cv2.imshow('grey', gray_image)
+    cv2.waitKey(0)
+
     # draw rectangles around each contour
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
         
         # if area is less than 1000, ignore it
-        if w*h < 1000:
+        if w*h < 1200:
             continue
         rectLocation.append((x, y, w, h))
-
-
-
-    
-    
-    
 
     return rectLocation
     
