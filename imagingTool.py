@@ -29,7 +29,7 @@ def colorRangeGraph(image):
     meanIndex = np.mean(image.ravel())
 
     # move the mean slightly to the left using standard deviation
-    meanIndex = meanIndex - 0.7*np.std(image.ravel())
+    meanIndex = meanIndex - 0.35*np.std(image.ravel())
     # display graph of the image color range with mean
     
     #plt.hist(image.ravel(), bins=256, range=(0.0, 1.0), fc='k', ec='k')
@@ -47,6 +47,9 @@ def TEfinder(image):
 
     # Convert the image to 8-bit
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+    
+    # apply thresholding to the image
+    _, image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # find the contours in the image
     countours, _ = cv2.findContours(image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -64,27 +67,41 @@ def TEfinder(image):
     # Convert image to color
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-    coords= []
+    xList = [0]
+    yList = [0]
     
     # draw the contours on the image
     cv2.drawContours(image, oval_contours, -1, (0, 255, 0), 3)
     plt.imshow(image)
     plt.show()
 
-    #pull all (x,y) sets from the contours
+    # grab x, y values of the oval contours
     for cnt in oval_contours:
-        for point in cnt:
-            x, y = point[0]
-            coords.append((x, y))
+        x, y, w, h = cv2.boundingRect(cnt)
+        xList.append(x)
+        yList.append(y)
 
-    coords = np.array(coords)
-    # remove values if they are within 1/32 of the max x value
+    xList = np.array(xList)
+    yList = np.array(yList)
+
+    # remove values if they are withing 1/32 of the max x value
     imageLength = image.shape[1]
-    coords = coords[coords[:,0] < imageLength - imageLength/32]
+    xList = xList[xList < 27/30*imageLength]
+    xList = xList[xList > 1/10*imageLength]
 
-    #TODO: Return the polygon giving the xy coordinates of the points at the corners of the array and then pass them to the TurbFinder and main method
+    # strip outliers from the x, y values and any 0 values
+    xList = reject_outliers(xList)
+    yList = reject_outliers(yList)
 
-    return 0
+    rectLocation.append(np.max(xList)) 
+    rectLocation.append(np.min(xList))
+
+    rectLocation.append(np.max(yList))
+    rectLocation.append(np.min(yList))
+
+    # display the image
+
+    return rectLocation
 
 def TurbFinder(image, rectPoly):
     rectLocation = []
@@ -96,9 +113,11 @@ def TurbFinder(image, rectPoly):
     # Convert the image to 8-bit
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
 
-    # Turn area inside the polygon black
-    mask = np.zeros(image.shape, dtype=np.uint8)
-    cv2.fillPoly(mask, [np.array(rectPoly)], 255)
+    # Turn the area inside of rectPoly to black
+    xMax, xMin, yMax, yMin = rectPoly
+    image[yMin:yMax, xMin:xMax] = 0
+
+    
 
     # if pixel value is less than 50, turn it black
     #image[image < 135] = 0
@@ -147,7 +166,7 @@ def TurbFinder(image, rectPoly):
         rectLocation.append((x, y, w, h))
 
     return rectLocation
-    
+
 def removeIntersectingRects(rects):
     # remove intersecting rectangles
     i = 0
@@ -166,10 +185,12 @@ def removeIntersectingRects(rects):
             j += 1
         i += 1
     return rects
+    
+
 def main():
     # Read the dicom file
     inputDir = 'dcmHoldingFolder'
-    file = os.path.join(inputDir, 'waxTE.dcm')
+    file = os.path.join(inputDir, 'xrayTest.dcm')
 
     # Convert the dicom file to an image
     ds = pydicom.dcmread(file)
@@ -178,27 +199,31 @@ def main():
 
 
     # Iterate the mask to refine the image
-    for i in range(2):
+    for i in range(3):
         thresh = colorRangeGraph(image)
         mask = cv2.inRange(image, thresh, 1.0)
         image = cv2.bitwise_and(image, image, mask=mask)
 
     
     # Pass image into TE finder
-    rectPoly = TEfinder(image)
-    partsRect = TurbFinder(image, rectPoly)
+    rect = TEfinder(image)
+    partsRect = TurbFinder(image, rect)
+
+    print(partsRect)
+    
+    xMax, xMin, yMax, yMin = rect
+
     
     # convert colorspace so that rectangle can be overlayed on the image
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
     image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 
-    # create a polygon using the values returned from the TEfinderMethod
-    #cv2.polylines(image, [np.array(rectPoly)], True, (0, 0, 255), 2)
     
-    # print different parts of the image
-    
-    #print(rectPoly)
 
+    # create a rectangle using dimensions and overlay it on the image
+    cv2.rectangle(image, (xMin-10, yMin-10), (xMax+10, yMax+10), (0, 0, 255), 2)
+
+    # remove intersecting rectangles
     partsRect = removeIntersectingRects(partsRect)
     print(partsRect)
     # create a rectangle using dimensions and overlay it on the image
@@ -210,6 +235,12 @@ def main():
     plt.show()
 
     cv2.waitKey(0)
+    
+        
+    
+   
+    
+
+
 
 main()
-
